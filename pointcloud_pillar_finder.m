@@ -5,12 +5,14 @@ tic
 
 cloudMatrix = noisyMatrix(100, 100, 100, 1000);
 cloudMatrix = addRandomPillar(cloudMatrix, .5, 0.5, 3, 0.5);
+cloudMatrix = addRandomBeam(cloudMatrix, .5, 0.5, 3, 0.5);
+
 
 pc = pointCloud(cloudMatrix);
 pcshow(pc)
 
-[xGuess, yGuess] = findPillar(pc, 10)
-
+[PillarxGuess, PillarzGuess] = findPillar(pc, 10)
+[BeamxGuess, BeamzGuess] = findBeam(pc, 10)
 
 
 
@@ -55,6 +57,48 @@ function [xGuess, yGuess] = findPillar(pc, searchStep)
      pcshow(search.Location, 'r')
     
 end
+
+
+function [xGuess, zGuess] = findBeam(pc, searchStep)
+    
+    %getting boundaries
+    bounds = max(pc.Location);
+    xMax = bounds(1);
+    yMax = bounds(2);
+    zMax = bounds(3);
+   
+    %initializing guesses and best counter
+    xGuess = -1;
+    zGuess = -1;
+    best = 0;
+
+
+    %itterating through point cloud
+    for x = 0:searchStep:xMax-searchStep
+        for z = 0:searchStep:zMax-searchStep
+            roi = [x, x+searchStep, 0, yMax, z, z+searchStep];
+            indices = findPointsInROI(pc, roi);
+            search = select(pc, indices);
+            found = sum(search.Location()~=0);
+
+            if found > best
+                best = found;
+                xGuess = x;
+                zGuess = z;
+            end
+        end
+
+    end
+
+     %displaying best find
+     roi = [xGuess, xGuess+searchStep, 0, yMax, zGuess, zGuess+searchStep];
+     indices = findPointsInROI(pc, roi);
+     search = select(pc, indices);
+     figure
+     pcshow(search.Location, 'r')
+    
+end
+
 
 %generates pointcloud with some noise
 function cloud = noisyMatrix(xMax, yMax, zMax, numPoints)
@@ -160,6 +204,121 @@ function modMatrix = addRandomPillar(originalMatrix, stepHeight, error, width, s
                         appendMatrix(row, 1) = xPos - i*stepWidth;
                         appendMatrix(row, 2) = yPos - width;
                         appendMatrix(row, 3) = k*stepHeight;
+     
+                end
+
+                if rand() < error
+                    appendMatrix(row, :) = [];
+                end
+
+                row = row + 1;
+            end         
+        end
+    end
+
+    modMatrix = [modMatrix; appendMatrix];
+end
+
+
+function modMatrix = addRandomBeam(originalMatrix, stepHeight, error, width, stepWidth)
+    
+    %gettings bounds
+    bounds = max(originalMatrix);
+
+    %setting furthest corner from origin as base corner
+    xPos = bounds(1)*rand();
+    zPos = bounds(3)*rand();
+    
+
+    % setting number of vertical points in base corner 
+    numPillarPoints = floor(bounds(2)/stepHeight);
+
+    %defining corner matricies
+    baseCornerMatrix = zeros(numPillarPoints, 3);
+    cornerMatrixNegX = zeros(numPillarPoints, 3);
+    cornerMatrixNegZ = zeros(numPillarPoints, 3);
+    cornerMatrixNegXZ = zeros(numPillarPoints, 3);
+
+    % filling corner matricies
+    for i = 1:numPillarPoints
+        
+        %filling base corner
+        baseCornerMatrix(i, 1) = xPos;
+        baseCornerMatrix(i, 2) = i*stepHeight;
+        baseCornerMatrix(i, 3) = zPos;
+        if rand() < error
+            baseCornerMatrix(i, :) = [];
+        end
+
+        %filling neg X corner
+        cornerMatrixNegX(i, 1) = xPos-width;
+        cornerMatrixNegX(i, 2) = i*stepHeight;
+        cornerMatrixNegX(i, 3) = zPos;
+        if rand() < error
+            cornerMatrixNegX(i, :) = [];
+        end
+
+        %filling neg Y corner
+        cornerMatrixNegZ(i, 1) = xPos;
+        cornerMatrixNegZ(i, 2) = i*stepHeight;
+        cornerMatrixNegZ(i, 3) = zPos - width;
+        if rand() < error
+            cornerMatrixNegZ(i, :) = [];
+        end        
+
+        %filling neg XY corner
+        cornerMatrixNegXZ(i, 1) = xPos-width;
+        cornerMatrixNegXZ(i, 2) = i*stepHeight;
+        cornerMatrixNegXZ(i, 3) = zPos-width;
+        if rand() < error
+            cornerMatrixNegXZ(i, :) = [];
+        end        
+
+    end    
+    
+   
+
+
+    % filling gap between corners
+    numGapPoints = ceil(width/stepWidth) - 1;
+   
+    appendMatrix = zeros(numGapPoints*numPillarPoints*4, 3);
+     % adding corners to matrix
+
+
+    modMatrix = [originalMatrix; 
+                baseCornerMatrix; 
+                cornerMatrixNegX;
+                zeros(numGapPoints*numPillarPoints*4, 3);
+                zeros(numGapPoints*numPillarPoints*4, 3);
+                cornerMatrixNegZ; 
+                cornerMatrixNegXZ];
+
+
+    row = 1;
+    for i = 1:numGapPoints % each gap point
+        for j = 1:4 % each cardinal direction
+            for k = 1:numPillarPoints % each pillar point
+                switch j
+                    case 1 %neg X
+                        appendMatrix(row, 1) = xPos - i*stepWidth;
+                        appendMatrix(row, 2) = k*stepHeight;
+                        appendMatrix(row, 3) = zPos;
+
+                    case 2 %neg Y
+                        appendMatrix(row, 1) = xPos;
+                        appendMatrix(row, 2) = k*stepHeight;
+                        appendMatrix(row, 3) = zPos - i*stepWidth;
+
+                    case 3 %neg XY
+                        appendMatrix(row, 1) = xPos - width;
+                        appendMatrix(row, 2) = k*stepHeight;
+                        appendMatrix(row, 3) = zPos - i*stepWidth;
+
+                    case 4 %neg YX
+                        appendMatrix(row, 1) = xPos - i*stepWidth;
+                        appendMatrix(row, 2) = k*stepHeight;
+                        appendMatrix(row, 3) = zPos - width;
      
                 end
 
